@@ -133,6 +133,7 @@
     let estado = estadoInicial();
     let restantes = BANCO.map(function (_, i) { return i; });
     const contadores = FACTORES.map(function () { return 0; });
+    const historial = [];
     let n = 0;
     let parada;
     for (;;) {
@@ -140,7 +141,9 @@
       const item = BANCO[eleccion.idx];
       restantes = restantes.filter(function (i) { return i !== eleccion.idx; });
       contadores[indiceFactor(item.factor)]++;
-      estado = actualizar(estado, item, responder(escenario, item));
+      const r = responder(escenario, item);
+      historial.push({ item: item, respuesta: r });
+      estado = actualizar(estado, item, r);
       n++;
       parada = estadoParada(estado, n, restantes.length, contadores);
       if (parada.parar) break;
@@ -155,6 +158,7 @@
       factoresBien: factoresBien,
       perfilExacto: factoresBien === FACTORES.length,
       firme: parada.firme,
+      avisoLz: !personFit(estado, historial).fiable,
       n: n
     };
   }
@@ -170,13 +174,15 @@
   function ejecutar() {
     let filas = '';
     ESCENARIOS.forEach(function (e) {
-      let nivelBien = 0, perfilExacto = 0, factoresBien = 0, firmes = 0, largo = 0;
+      let nivelBien = 0, perfilExacto = 0, factoresBien = 0, firmes = 0,
+        avisos = 0, largo = 0;
       for (let s = 0; s < N_SIM; s++) {
         const res = simularSesion(e);
         if (res.nivelBien) nivelBien++;
         if (res.perfilExacto) perfilExacto++;
         factoresBien += res.factoresBien;
         if (res.firme) firmes++;
+        if (res.avisoLz) avisos++;
         largo += res.n;
       }
       filas += '<tr><td>' + nombreEscenario(e) + '</td>' +
@@ -184,19 +190,23 @@
         '<td class="destacado">' + (100 * perfilExacto / N_SIM).toFixed(1) + ' %</td>' +
         '<td>' + (100 * factoresBien / (N_SIM * FACTORES.length)).toFixed(1) + ' %</td>' +
         '<td>' + (largo / N_SIM).toFixed(1) + '</td>' +
-        '<td>' + (100 * firmes / N_SIM).toFixed(0) + ' %</td></tr>';
+        '<td>' + (100 * firmes / N_SIM).toFixed(0) + ' %</td>' +
+        '<td>' + (100 * avisos / N_SIM).toFixed(1) + ' %</td></tr>';
     });
 
     document.getElementById('resultados').innerHTML =
       '<div style="overflow-x:auto"><table><thead>' +
       '<tr><th>Escenario (nivel · errores reales)</th><th>nivel acertado</th>' +
       '<th>perfil exacto</th><th>errores bien clasificados</th>' +
-      '<th>media preguntas</th><th>cierres firmes</th></tr>' +
+      '<th>media preguntas</th><th>cierres firmes</th><th>avisos l_z</th></tr>' +
       '</thead><tbody>' + filas + '</tbody></table></div>' +
       '<p class="nota">«Nivel acertado»: el nivel MAP coincide con el real. ' +
-      '«Errores bien clasificados»: media de los tres factores. Es ' +
-      'fiabilidad bajo el modelo: los respondentes se generan con las ' +
-      'mismas verosimilitudes que después los diagnostican.</p>';
+      '«Errores bien clasificados»: media de los tres factores. ' +
+      '«Avisos l_z»: porcentaje de sesiones con aviso de person-fit ' +
+      '(l_z &lt; −2); con respondentes coherentes con el modelo debe ser ' +
+      'bajo (son falsas alarmas). Es fiabilidad bajo el modelo: los ' +
+      'respondentes se generan con las mismas verosimilitudes que después ' +
+      'los diagnostican.</p>';
   }
 
   document.getElementById('btn-ejecutar').addEventListener('click', ejecutar);

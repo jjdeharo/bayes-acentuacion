@@ -198,6 +198,7 @@
     margin-bottom: 16px;
     font-size: 0.95rem;
   }
+  .banda-fiabilidad { border-left-color: var(--mal); }
   .diagnostico { margin: 4px 0 2px; font-size: 1.1rem; }
   .confianza { color: var(--tinta-2); margin: 0 0 14px; }
   .bloque h3 {
@@ -344,6 +345,7 @@
   <section id="pantalla-final" class="tarjeta resultado oculto" aria-live="polite">
     <h2>Resultado</h2>
     <div id="aviso-provisional" class="banda-provisional oculto"></div>
+    <div id="aviso-fiabilidad" class="banda-provisional banda-fiabilidad oculto"></div>
     <p class="diagnostico" id="texto-diagnostico"></p>
     <p class="confianza" id="texto-confianza"></p>
     <div class="viz" id="grafico-final"></div>
@@ -510,6 +512,20 @@
         'etiquetas.';
     }
 
+    const ajuste = personFit(estado, historial);
+    const avisoFiab = $('aviso-fiabilidad');
+    if (ajuste.fiable) {
+      avisoFiab.classList.add('oculto');
+    } else {
+      avisoFiab.classList.remove('oculto');
+      avisoFiab.textContent =
+        'Aviso de fiabilidad: tus respuestas siguen un patrón poco ' +
+        'coherente con el diagnóstico estimado (ajuste l_z = ' +
+        ajuste.lz.toFixed(2) + '). Puede deberse a despistes, a responder ' +
+        'al azar o a un tipo de error que este recurso no contempla. ' +
+        'Tómalo con cautela y, si puedes, repite el reto con calma.';
+    }
+
     $('texto-diagnostico').textContent =
       'Nivel estimado: ' + nivel.nombre + '.';
     $('texto-confianza').textContent =
@@ -611,12 +627,19 @@
       -1
     );
     const parada = estadoParada(estado, historial.length, restantes.length, contadores);
+    let textoAjuste = '';
+    if (historial.length > 0) {
+      const ajuste = personFit(estado, historial);
+      textoAjuste = ' Ajuste del patrón (person-fit): l_z = ' +
+        ajuste.lz.toFixed(2) +
+        (ajuste.fiable ? '.' : ' (< −2: patrón poco coherente).');
+    }
     $('dato-entropia').textContent =
       'Entropía del nivel: ' + parada.h.toFixed(3) + ' bits (umbral de ' +
       'cierre firme: ' + H_STOP.toFixed(3) + ' bits con p_min = ' +
       PARAMETROS.pMin + '). Incertidumbre total (nivel + errores): ' +
       entropiaTotal(estado).toFixed(3) + ' bits. Preguntas respondidas: ' +
-      historial.length + '.';
+      historial.length + '.' + textoAjuste;
 
     const zona = $('dato-actualizacion');
     if (!ultima) { zona.innerHTML = ''; return; }

@@ -658,3 +658,42 @@ function nivelMap(global) {
   }
   return mejor;
 }
+
+/*
+ * Ajuste del patrón individual (person-fit, índice l_z). Evalúa si el
+ * patrón de respuestas es coherente con el estado MAP de la conjunta
+ * (nivel + perfil de errores): compara la log-verosimilitud del patrón
+ * observado con su media y varianza esperadas bajo ese estado,
+ * promediando sobre las opciones de cada ítem (generalización
+ * politómica del l_z clásico). Un valor muy negativo (< -2) señala un
+ * patrón que el modelo explica mal —descuidos, azar o un error no
+ * contemplado— y el diagnóstico debe tomarse con cautela, aunque el
+ * posterior sea alto. Con pocas preguntas es orientativo, no una
+ * prueba formal.
+ */
+function personFit(estado, historial) {
+  let idxMap = 0;
+  estado.conjunto.forEach(function (p, idx) {
+    if (p > estado.conjunto[idxMap]) idxMap = idx;
+  });
+  const i = nivelDeIndice(idxMap);
+  const m = perfilDeIndice(idxMap);
+  let logL = 0, esperanza = 0, varianza = 0;
+  historial.forEach(function (paso) {
+    const presente = perfilTieneError(m, indiceFactor(paso.item.factor));
+    logL += Math.log(probOpcion(paso.item, i, presente, paso.respuesta));
+    let e = 0, e2 = 0;
+    for (let r = 0; r < PARAMETROS.numOpciones; r++) {
+      const p = probOpcion(paso.item, i, presente, r);
+      if (p > 0) {
+        const lp = Math.log(p);
+        e += p * lp;
+        e2 += p * lp * lp;
+      }
+    }
+    esperanza += e;
+    varianza += e2 - e * e;
+  });
+  const lz = varianza > 0 ? (logL - esperanza) / Math.sqrt(varianza) : 0;
+  return { lz: lz, fiable: lz >= -2 };
+}

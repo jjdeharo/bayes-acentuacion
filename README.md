@@ -64,6 +64,15 @@ Acceso: **https://jjdeharo.github.io/bayes-acentuacion/**
   de errores (presente / ausente / indeterminado con su probabilidad),
   recomendación pedagógica por nivel y por cada error detectado, y
   recorrido de la sesión.
+- **Person-fit (índice `l_z`)**: al cerrar la sesión se comprueba si el
+  patrón de respuestas es coherente con el estado MAP diagnosticado
+  (generalización politómica del `l_z`, calculada sobre la opción elegida
+  en cada ítem). Si `l_z < −2`, el resultado se acompaña de un aviso de
+  fiabilidad: puede haber descuidos, azar o un error no contemplado por el
+  modelo. Con respondentes sintéticos coherentes el aviso salta en menos
+  del 1 % de sesiones (falsas alarmas); con 6–14 preguntas es una señal de
+  cautela orientativa, no una prueba formal, y solo detecta patrones muy
+  incoherentes. El valor se muestra en directo en el panel docente.
 
 ## En qué se diferencia de los otros ejemplos
 
@@ -85,7 +94,8 @@ cuarto caso de «Elección del modelo» de la especificación operativa.
   actualización de la conjunta, selección adaptativa y criterio de parada.
 - `validacion.html` — **herramienta del autor** (no del alumnado):
   validación Monte Carlo con respondentes sintéticos de nivel y perfil de
-  errores conocidos; comprueba si el diseño recupera ambos.
+  errores conocidos; comprueba si el diseño recupera ambos y la tasa de
+  falsas alarmas del aviso de person-fit.
 
 El recurso funciona sin servidor: basta abrir `index.html` en un navegador
 (con `motor.js` en la misma carpeta).
