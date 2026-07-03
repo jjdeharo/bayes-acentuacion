@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validación Monte Carlo — herramienta del autor</title>
+<style>
+  :root {
+    --plano: #f9f9f7; --superficie: #fcfcfb; --tinta: #0b0b0b;
+    --tinta-2: #52514e; --silenciado: #898781; --linea: #e1e0d9;
+    --borde: rgba(11,11,11,0.10); --acento: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --plano: #0d0d0d; --superficie: #1a1a19; --tinta: #ffffff;
+      --tinta-2: #c3c2b7; --silenciado: #898781; --linea: #2c2c2a;
+      --borde: rgba(255,255,255,0.10); --acento: #3987e5;
+    }
+  }
+  body {
+    margin: 0; background: var(--plano); color: var(--tinta);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 780px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.4rem; }
+  p { color: var(--tinta-2); }
+  .tarjeta {
+    background: var(--superficie); border: 1px solid var(--borde);
+    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+  }
+  button {
+    font: inherit; cursor: pointer; background: var(--acento); color: #fff;
+    border: none; border-radius: 8px; padding: 10px 22px;
+  }
+  table { border-collapse: collapse; margin-top: 12px; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+  th, td {
+    border-bottom: 1px solid var(--linea);
+    padding: 6px 14px 6px 0; text-align: right;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--silenciado); font-weight: 500; }
+  td.destacado { font-weight: 600; color: var(--tinta); }
+  .nota { font-size: 0.88rem; color: var(--silenciado); }
+  .site-footer {
+    background: #1e293b;
+    color: #cbd5e1;
+    text-align: center;
+    font-size: 0.82rem;
+    padding: 1rem 1.5rem;
+    line-height: 1.8;
+    border-radius: 12px;
+    margin: 28px 0 20px;
+  }
+  .site-footer a { color: #a5b4fc; text-decoration: none; }
+  .site-footer a:hover { text-decoration: underline; }
+  .site-footer .sep { margin: 0 0.5rem; opacity: 0.4; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Validación Monte Carlo del diseño</h1>
+  <p><strong>Herramienta del autor, no del alumnado.</strong> Genera
+  respondentes sintéticos con un nivel y un perfil de errores conocidos, les
+  pasa el test con la misma selección adaptativa y el mismo criterio de
+  parada que usa el recurso, y comprueba si el sistema recupera el nivel y
+  clasifica bien cada error. Mide la <em>separabilidad interna</em> del
+  diseño bajo el modelo: los respondentes se generan con las mismas
+  verosimilitudes que luego los diagnostican, así que es fiabilidad bajo el
+  modelo, no validez empírica.</p>
+
+  <div class="tarjeta">
+    <button id="btn-ejecutar">Ejecutar 300 simulaciones por escenario</button>
+    <div id="resultados"></div>
+  </div>
+
+  <p class="nota">El recurso del alumno es <code>index.html</code>; el modelo
+  compartido está en <code>motor.js</code>. «Perfil exacto» exige que los
+  tres errores queden clasificados correctamente (un «indeterminado» cuenta
+  como fallo de clasificación).</p>
+
+  <footer class="site-footer">
+    © <a href="https://bilateria.org" target="_blank" rel="noopener">Juan José de Haro</a>
+    <span class="sep">·</span>
+    Contenido: <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
+    <span class="sep">·</span>
+    Código: <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">AGPL-3.0</a>
+  </footer>
+</main>
+
+<script src="motor.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const N_SIM = 300;
+
+  /* Escenarios: cada nivel sin errores y con cada error por separado,
+     más un caso con dos errores simultáneos. */
+  const ESCENARIOS = [];
+  NIVELES.forEach(function (n, i) {
+    ESCENARIOS.push({ nivel: i, errores: [] });
+    FACTORES.forEach(function (f, j) {
+      ESCENARIOS.push({ nivel: i, errores: [j] });
+    });
+  });
+  ESCENARIOS.push({ nivel: 1, errores: [1, 2] });
+
+  function muestrear(dist) {
+    const u = Math.random();
+    let acumulado = 0;
+    for (let r = 0; r < dist.length; r++) {
+      acumulado += dist[r];
+      if (u < acumulado) return r;
+    }
+    return dist.length - 1;
+  }
+
+  /* Respuesta del respondente sintético al ítem: si tiene el error que
+     el ítem ataca, responde según los tramos de error presente; si no,
+     según la IRT de su nivel verdadero. */
+  function responder(escenario, item) {
+    const j = indiceFactor(item.factor);
+    const conError = escenario.errores.indexOf(j) !== -1;
+    const dist = [];
+    for (let r = 0; r < PARAMETROS.numOpciones; r++) {
+      dist.push(probOpcion(item, escenario.nivel, conError, r));
+    }
+    return muestrear(dist);
+  }
+
+  function simularSesion(escenario) {
+    let estado = estadoInicial();
+    let restantes = BANCO.map(function (_, i) { return i; });
+    const contadores = FACTORES.map(function () { return 0; });
+    let n = 0;
+    let parada;
+    for (;;) {
+      const eleccion = seleccionar(estado, restantes, contadores, n === 0);
+      const item = BANCO[eleccion.idx];
+      restantes = restantes.filter(function (i) { return i !== eleccion.idx; });
+      contadores[indiceFactor(item.factor)]++;
+      estado = actualizar(estado, item, responder(escenario, item));
+      n++;
+      parada = estadoParada(estado, n, restantes.length, contadores);
+      if (parada.parar) break;
+    }
+    let factoresBien = 0;
+    FACTORES.forEach(function (_, j) {
+      const esperado = escenario.errores.indexOf(j) !== -1 ? 'presente' : 'ausente';
+      if (clasificarFactor(estado.factores[j]) === esperado) factoresBien++;
+    });
+    return {
+      nivelBien: nivelMap(estado.global) === escenario.nivel,
+      factoresBien: factoresBien,
+      perfilExacto: factoresBien === FACTORES.length,
+      firme: parada.firme,
+      n: n
+    };
+  }
+
+  function nombreEscenario(e) {
+    const nivel = NIVELES[e.nivel].nombre;
+    if (e.errores.length === 0) return nivel + ' · sin errores';
+    return nivel + ' · ' + e.errores.map(function (j) {
+      return FACTORES[j].id;
+    }).join(' + ');
+  }
+
+  function ejecutar() {
+    let filas = '';
+    ESCENARIOS.forEach(function (e) {
+      let nivelBien = 0, perfilExacto = 0, factoresBien = 0, firmes = 0, largo = 0;
+      for (let s = 0; s < N_SIM; s++) {
+        const res = simularSesion(e);
+        if (res.nivelBien) nivelBien++;
+        if (res.perfilExacto) perfilExacto++;
+        factoresBien += res.factoresBien;
+        if (res.firme) firmes++;
+        largo += res.n;
+      }
+      filas += '<tr><td>' + nombreEscenario(e) + '</td>' +
+        '<td class="destacado">' + (100 * nivelBien / N_SIM).toFixed(1) + ' %</td>' +
+        '<td class="destacado">' + (100 * perfilExacto / N_SIM).toFixed(1) + ' %</td>' +
+        '<td>' + (100 * factoresBien / (N_SIM * FACTORES.length)).toFixed(1) + ' %</td>' +
+        '<td>' + (largo / N_SIM).toFixed(1) + '</td>' +
+        '<td>' + (100 * firmes / N_SIM).toFixed(0) + ' %</td></tr>';
+    });
+
+    document.getElementById('resultados').innerHTML =
+      '<div style="overflow-x:auto"><table><thead>' +
+      '<tr><th>Escenario (nivel · errores reales)</th><th>nivel acertado</th>' +
+      '<th>perfil exacto</th><th>errores bien clasificados</th>' +
+      '<th>media preguntas</th><th>cierres firmes</th></tr>' +
+      '</thead><tbody>' + filas + '</tbody></table></div>' +
+      '<p class="nota">«Nivel acertado»: el nivel MAP coincide con el real. ' +
+      '«Errores bien clasificados»: media de los tres factores. Es ' +
+      'fiabilidad bajo el modelo: los respondentes se generan con las ' +
+      'mismas verosimilitudes que después los diagnostican.</p>';
+  }
+
+  document.getElementById('btn-ejecutar').addEventListener('click', ejecutar);
+})();
+</script>
+</body>
+</html>

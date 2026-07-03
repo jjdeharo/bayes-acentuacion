@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>¿Con tilde o sin tilde? — diagnóstico adaptativo de acentuación</title>
+<style>
+  :root {
+    --plano: #f9f9f7;
+    --superficie: #fcfcfb;
+    --tinta: #0b0b0b;
+    --tinta-2: #52514e;
+    --silenciado: #898781;
+    --linea: #e1e0d9;
+    --eje: #c3c2b7;
+    --borde: rgba(11, 11, 11, 0.10);
+    --serie-1: #2a78d6;
+    --serie-2: #1baf7a;
+    --serie-3: #eda100;
+    --bien: #0ca30c;
+    --bien-texto: #006300;
+    --mal: #d03b3b;
+    --acento: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --plano: #0d0d0d;
+      --superficie: #1a1a19;
+      --tinta: #ffffff;
+      --tinta-2: #c3c2b7;
+      --silenciado: #898781;
+      --linea: #2c2c2a;
+      --eje: #383835;
+      --borde: rgba(255, 255, 255, 0.10);
+      --serie-1: #3987e5;
+      --serie-2: #199e70;
+      --serie-3: #c98500;
+      --bien: #0ca30c;
+      --bien-texto: #0ca30c;
+      --mal: #d03b3b;
+      --acento: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--plano);
+    color: var(--tinta);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px 16px 0;
+  }
+  header h1 {
+    font-size: 1.5rem;
+    margin: 8px 0 4px;
+  }
+  header p.sub {
+    color: var(--tinta-2);
+    margin: 0 0 20px;
+  }
+  .tarjeta {
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+  }
+  .btn-principal {
+    background: var(--acento);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 22px;
+    font-size: 1.05rem;
+  }
+  .btn-principal:hover { filter: brightness(1.08); }
+
+  /* Qué mide, en la pantalla inicial */
+  .titulo-hipotesis {
+    font-size: 0.95rem;
+    margin: 20px 0 6px;
+  }
+  ul.lista-hipotesis {
+    list-style: none;
+    margin: 0 0 20px;
+    padding-left: 4px;
+    color: var(--tinta-2);
+    font-size: 0.95rem;
+  }
+  ul.lista-hipotesis li { margin: 6px 0; }
+  ul.lista-hipotesis .punto {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: baseline;
+  }
+  ul.lista-hipotesis strong { color: var(--tinta); font-weight: 600; }
+
+  .aviso-demo {
+    border: 1px solid var(--borde);
+    border-left: 4px solid var(--serie-3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 12px 0 4px;
+    font-size: 0.9rem;
+  }
+
+  /* Pregunta */
+  .contador {
+    color: var(--silenciado);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+  }
+  .enunciado { font-size: 1.15rem; margin: 0 0 18px; max-width: 60ch; }
+  .opciones {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    align-items: stretch;
+  }
+  .opciones button {
+    background: var(--superficie);
+    border: 1.5px solid var(--eje);
+    border-radius: 10px;
+    color: var(--tinta);
+    padding: 12px 16px;
+    font-size: 1rem;
+    text-align: left;
+  }
+  .opciones button:hover:not(:disabled) { border-color: var(--acento); }
+  .opciones button:disabled { cursor: default; opacity: 0.55; }
+  .opciones button.elegida { opacity: 1; border-color: var(--acento); }
+
+  /* Retroalimentación */
+  .feedback { margin-top: 18px; }
+  .feedback .veredicto {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .feedback .veredicto.ok { color: var(--bien-texto); }
+  .feedback .veredicto.ko { color: var(--mal); }
+  .feedback .explica {
+    color: var(--tinta-2);
+    margin: 6px 0 14px;
+  }
+
+  /* Barras de distribución */
+  .viz { margin-top: 8px; }
+  .viz-fila {
+    display: grid;
+    grid-template-columns: minmax(120px, 230px) 1fr 52px;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+  }
+  .viz-etiqueta {
+    font-size: 0.88rem;
+    color: var(--tinta-2);
+    text-align: right;
+  }
+  .viz-fila.map .viz-etiqueta { color: var(--tinta); font-weight: 600; }
+  .viz-pista {
+    border-left: 2px solid var(--eje);
+    height: 18px;
+  }
+  .viz-barra {
+    height: 100%;
+    border-radius: 0 4px 4px 0;
+    min-width: 2px;
+    transition: width 0.35s ease;
+  }
+  .viz-valor {
+    font-size: 0.88rem;
+    color: var(--tinta);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Resultado final */
+  .resultado h2 { margin-top: 0; }
+  .banda-provisional {
+    border: 1px solid var(--borde);
+    border-left: 4px solid var(--serie-3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--tinta-2);
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+  }
+  .diagnostico { margin: 4px 0 2px; font-size: 1.1rem; }
+  .confianza { color: var(--tinta-2); margin: 0 0 14px; }
+  .bloque h3 {
+    font-size: 0.95rem;
+    margin: 18px 0 6px;
+  }
+  .bloque p { margin: 0 0 8px; color: var(--tinta-2); }
+
+  /* Perfil de errores */
+  ul.perfil {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+  }
+  ul.perfil li {
+    margin: 8px 0;
+    color: var(--tinta-2);
+  }
+  .chip {
+    display: inline-block;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 1px 10px;
+    margin-right: 8px;
+    white-space: nowrap;
+  }
+  .chip.presente { background: color-mix(in srgb, var(--mal) 15%, transparent); color: var(--mal); }
+  .chip.ausente { background: color-mix(in srgb, var(--bien) 15%, transparent); color: var(--bien-texto); }
+  .chip.indeterminado { background: color-mix(in srgb, var(--silenciado) 18%, transparent); color: var(--silenciado); }
+  ul.perfil strong { color: var(--tinta); font-weight: 600; }
+  ul.perfil .detalle { display: block; margin: 2px 0 0 4px; font-size: 0.92rem; }
+
+  table.recorrido {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    margin-top: 8px;
+  }
+  table.recorrido th {
+    text-align: left;
+    color: var(--silenciado);
+    font-weight: 500;
+    border-bottom: 1px solid var(--linea);
+    padding: 4px 8px 6px;
+  }
+  table.recorrido td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--linea);
+  }
+  td.res-ok { color: var(--bien-texto); white-space: nowrap; }
+  td.res-ko { color: var(--mal); white-space: nowrap; }
+
+  /* Panel docente */
+  details.docente {
+    background: var(--superficie);
+    border: 1px dashed var(--eje);
+    border-radius: 12px;
+    padding: 14px 20px;
+    color: var(--tinta-2);
+    font-size: 0.92rem;
+  }
+  details.docente summary {
+    cursor: pointer;
+    color: var(--tinta);
+    font-weight: 600;
+  }
+  details.docente .dato { margin: 10px 0 2px; }
+  details.docente table {
+    border-collapse: collapse;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  details.docente td, details.docente th {
+    border-bottom: 1px solid var(--linea);
+    padding: 3px 10px 3px 0;
+    text-align: left;
+    font-weight: normal;
+  }
+  .docente-cuerpo {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px 32px;
+  }
+  @media (min-width: 640px) {
+    .docente-cuerpo { grid-template-columns: 1.3fr 1fr; align-items: start; }
+  }
+
+  footer.nota-demo {
+    color: var(--silenciado);
+    font-size: 0.8rem;
+    margin: 28px 0 20px;
+    text-align: center;
+  }
+  .site-footer {
+    background: #1e293b;
+    color: #cbd5e1;
+    text-align: center;
+    font-size: 0.82rem;
+    padding: 1rem 1.5rem;
+    line-height: 1.8;
+    border-radius: 12px;
+    margin: 0 0 28px;
+  }
+  .site-footer a { color: #a5b4fc; text-decoration: none; }
+  .site-footer a:hover { text-decoration: underline; }
+  .site-footer .sep { margin: 0 0.5rem; opacity: 0.4; }
+  .oculto { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>¿Con tilde o sin tilde?</h1>
+    <p class="sub">Un reto de acentuación que se adapta a tus respuestas (Lengua Castellana, ESO).</p>
+  </header>
+
+  <section id="pantalla-inicio" class="tarjeta">
+    <p>Te iré mostrando palabras y frases para que elijas la que está bien
+    escrita. No es un examen: según lo que respondas, el sistema elegirá la
+    siguiente pregunta y, al final, te dirá qué nivel de acentuación tienes
+    y si hay algún despiste concreto que te convenga repasar.</p>
+    <p class="sub" style="font-size:0.9rem">Suelen bastar entre 6 y 12 preguntas.</p>
+    <h3 class="titulo-hipotesis">Qué mide este programa</h3>
+    <p class="sub" style="font-size:0.95rem">Estima a la vez tu
+    <strong>nivel global</strong> de acentuación (Iniciando · Avanzando ·
+    Dominando) y si cometes alguno de estos tres errores, que pueden darse
+    juntos o por separado:</p>
+    <ul class="lista-hipotesis" id="lista-factores"></ul>
+    <button class="btn-principal" id="btn-empezar">Empezar</button>
+  </section>
+
+  <section id="pantalla-pregunta" class="tarjeta oculto" aria-live="polite">
+    <p class="contador" id="contador"></p>
+    <p class="enunciado" id="enunciado"></p>
+    <div class="opciones" id="zona-opciones"></div>
+    <div class="feedback oculto" id="zona-feedback">
+      <p class="veredicto" id="veredicto"></p>
+      <p class="explica" id="explicacion"></p>
+      <button class="btn-principal" id="btn-siguiente">Siguiente</button>
+    </div>
+  </section>
+
+  <section id="pantalla-final" class="tarjeta resultado oculto" aria-live="polite">
+    <h2>Resultado</h2>
+    <div id="aviso-provisional" class="banda-provisional oculto"></div>
+    <p class="diagnostico" id="texto-diagnostico"></p>
+    <p class="confianza" id="texto-confianza"></p>
+    <div class="viz" id="grafico-final"></div>
+    <div class="bloque">
+      <h3>Errores concretos</h3>
+      <ul class="perfil" id="perfil-errores"></ul>
+      <h3>Qué significa</h3>
+      <p id="texto-descripcion"></p>
+      <h3>Siguiente paso recomendado</h3>
+      <div id="texto-recomendacion"></div>
+      <h3>Recorrido de la sesión</h3>
+      <div style="overflow-x:auto">
+        <table class="recorrido">
+          <thead>
+            <tr><th>Pregunta</th><th>Bloque</th><th>Tu respuesta</th><th>Resultado</th></tr>
+          </thead>
+          <tbody id="cuerpo-recorrido"></tbody>
+        </table>
+      </div>
+    </div>
+    <p style="margin-top:18px">
+      <button class="btn-principal" id="btn-repetir">Empezar de nuevo</button>
+    </p>
+  </section>
+
+  <details class="docente" id="panel-docente">
+    <summary>Panel docente: estado bayesiano en directo</summary>
+    <p class="aviso-demo"><strong>Aviso:</strong> este recurso es una
+    demostración. En un uso real con alumnado, este panel no existiría:
+    el estado bayesiano es información interna del sistema (y del docente),
+    y mostrarla condicionaría las respuestas.</p>
+    <p class="dato">El sistema mantiene una distribución conjunta exacta
+    sobre nivel × perfil de errores (3 niveles × 2³ perfiles = 24 estados):
+    el nivel genera la verosimilitud de acierto con IRT 3PL y cada error
+    tiene verosimilitudes explícitas por opción (su distractor
+    característico atrae al alumno que lo comete). Aquí se muestran las
+    marginales. La siguiente pregunta se elige maximizando la ganancia
+    esperada de información sobre los componentes aún no resueltos, con
+    cobertura mínima de los tres bloques.</p>
+    <div class="docente-cuerpo">
+      <div>
+        <p class="dato"><strong>Nivel global</strong> P(nivel):</p>
+        <div class="viz" id="grafico-docente-nivel"></div>
+        <p class="dato"><strong>Errores</strong> P(presente):</p>
+        <div class="viz" id="grafico-docente-factores"></div>
+        <p class="dato" id="dato-entropia"></p>
+      </div>
+      <div id="dato-actualizacion"></div>
+    </div>
+  </details>
+
+  <footer class="nota-demo">
+    Demostración de recurso adaptativo bayesiano de modelo combinado:
+    nivel ordinal (IRT 3PL) y errores coexistentes (verosimilitudes
+    explícitas por opción) en una distribución conjunta sobre
+    nivel × perfil de errores.
+  </footer>
+
+  <footer class="site-footer">
+    © <a href="https://bilateria.org" target="_blank" rel="noopener">Juan José de Haro</a>
+    <span class="sep">·</span>
+    Contenido: <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
+    <span class="sep">·</span>
+    Código: <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">AGPL-3.0</a>
+  </footer>
+</main>
+
+<script src="motor.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const COLOR_NIVEL = ['var(--serie-1)', 'var(--serie-2)', 'var(--serie-3)'];
+  const COLOR_FACTOR = 'var(--mal)';
+  const NOMBRE_ESTADO = {
+    presente: '✗ detectado',
+    ausente: '✓ descartado',
+    indeterminado: '? sin decidir'
+  };
+
+  const $ = function (id) { return document.getElementById(id); };
+
+  let estado, restantes, contadores, itemActual, historial;
+
+  function empezar() {
+    estado = estadoInicial();
+    restantes = BANCO.map(function (_, i) { return i; });
+    contadores = FACTORES.map(function () { return 0; });
+    historial = [];
+    $('pantalla-inicio').classList.add('oculto');
+    $('pantalla-final').classList.add('oculto');
+    $('pantalla-pregunta').classList.remove('oculto');
+    pintarDocente(null);
+    siguientePregunta();
+  }
+
+  function siguientePregunta() {
+    const eleccion = seleccionar(estado, restantes, contadores, historial.length === 0);
+    itemActual = BANCO[eleccion.idx];
+    restantes = restantes.filter(function (i) { return i !== eleccion.idx; });
+    contadores[indiceFactor(itemActual.factor)]++;
+
+    $('contador').textContent = 'Pregunta ' + (historial.length + 1);
+    $('enunciado').textContent = itemActual.enunciado;
+
+    const zona = $('zona-opciones');
+    zona.innerHTML = '';
+    itemActual.opciones.forEach(function (t, r) {
+      const b = document.createElement('button');
+      b.textContent = t;
+      b.addEventListener('click', function () { responder(r, b); });
+      zona.appendChild(b);
+    });
+    $('zona-feedback').classList.add('oculto');
+  }
+
+  function responder(r, boton) {
+    Array.prototype.forEach.call(
+      $('zona-opciones').querySelectorAll('button'),
+      function (b) { b.disabled = true; }
+    );
+    boton.classList.add('elegida');
+
+    const vero = verosimilitudesMarginales(estado, itemActual, r);
+    estado = actualizar(estado, itemActual, r);
+    const acierto = r === itemActual.correcta;
+    historial.push({ item: itemActual, respuesta: r, acierto: acierto });
+
+    const veredicto = $('veredicto');
+    if (acierto) {
+      veredicto.textContent = '✓ Correcto';
+      veredicto.className = 'veredicto ok';
+    } else {
+      veredicto.textContent = '✗ No es así';
+      veredicto.className = 'veredicto ko';
+    }
+    $('explicacion').textContent = itemActual.explicacion;
+    $('zona-feedback').classList.remove('oculto');
+
+    pintarDocente({ item: itemActual, vero: vero });
+
+    const parada = estadoParada(estado, historial.length, restantes.length, contadores);
+    $('btn-siguiente').textContent = parada.parar ? 'Ver resultado' : 'Siguiente';
+    $('btn-siguiente').onclick = parada.parar ? terminar : siguientePregunta;
+  }
+
+  function terminar() {
+    const parada = estadoParada(estado, historial.length, restantes.length, contadores);
+    const iMap = nivelMap(estado.global);
+    const nivel = NIVELES[iMap];
+
+    $('pantalla-pregunta').classList.add('oculto');
+    $('pantalla-final').classList.remove('oculto');
+
+    const aviso = $('aviso-provisional');
+    if (parada.firme) {
+      aviso.classList.add('oculto');
+    } else {
+      aviso.classList.remove('oculto');
+      aviso.textContent =
+        'Resultado provisional: con las respuestas de esta sesión el ' +
+        'sistema no alcanza la confianza mínima (80 %) en todas sus ' +
+        'conclusiones. Mira las distribuciones completas, no solo las ' +
+        'etiquetas.';
+    }
+
+    $('texto-diagnostico').textContent =
+      'Nivel estimado: ' + nivel.nombre + '.';
+    $('texto-confianza').textContent =
+      'Confianza: ' + porcentaje(estado.global[iMap]) +
+      ' tras ' + historial.length + ' preguntas (' +
+      historial.filter(function (x) { return x.acierto; }).length +
+      ' aciertos).';
+    $('texto-descripcion').textContent = nivel.descripcion;
+
+    pintarBarras(
+      $('grafico-final'),
+      NIVELES.map(function (n) { return n.nombre; }),
+      estado.global,
+      function (i) { return COLOR_NIVEL[i]; },
+      iMap
+    );
+
+    const perfil = $('perfil-errores');
+    perfil.innerHTML = '';
+    const presentes = [];
+    FACTORES.forEach(function (fac, j) {
+      const p = estado.factores[j];
+      const clase = clasificarFactor(p);
+      if (clase === 'presente') presentes.push(fac);
+      const li = document.createElement('li');
+      let html = '<span class="chip ' + clase + '">' +
+        NOMBRE_ESTADO[clase] + '</span><strong>' + fac.nombre +
+        '</strong> (' + porcentaje(p) + ' de probabilidad)';
+      if (clase === 'presente') {
+        html += '<span class="detalle">' + fac.descripcion + '</span>';
+      }
+      li.innerHTML = html;
+      perfil.appendChild(li);
+    });
+
+    const rec = $('texto-recomendacion');
+    rec.innerHTML = '';
+    const pNivel = document.createElement('p');
+    pNivel.textContent = nivel.recomendacion;
+    rec.appendChild(pNivel);
+    presentes.forEach(function (fac) {
+      const p = document.createElement('p');
+      p.innerHTML = '<strong>' + fac.nombre + ':</strong> ' + fac.recomendacion;
+      rec.appendChild(p);
+    });
+
+    const cuerpo = $('cuerpo-recorrido');
+    cuerpo.innerHTML = '';
+    historial.forEach(function (paso) {
+      const fac = FACTORES[indiceFactor(paso.item.factor)];
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + paso.item.corto + '</td>' +
+        '<td>' + fac.nombre + '</td>' +
+        '<td>' + paso.item.opciones[paso.respuesta] + '</td>' +
+        (paso.acierto
+          ? '<td class="res-ok">✓ correcta</td>'
+          : '<td class="res-ko">✗ incorrecta</td>');
+      cuerpo.appendChild(tr);
+    });
+  }
+
+  /* --- Presentación --- */
+
+  function porcentaje(p) {
+    if (p > 0.995) return '> 99 %';
+    if (p > 0 && p < 0.005) return '< 1 %';
+    return Math.round(p * 100) + ' %';
+  }
+
+  function pintarBarras(contenedor, etiquetas, valores, color, iDestacada) {
+    contenedor.innerHTML = '';
+    etiquetas.forEach(function (nombre, i) {
+      const fila = document.createElement('div');
+      fila.className = 'viz-fila' + (i === iDestacada ? ' map' : '');
+      fila.innerHTML =
+        '<span class="viz-etiqueta">' + nombre + '</span>' +
+        '<div class="viz-pista"><div class="viz-barra" style="width:' +
+        (valores[i] * 100).toFixed(1) + '%;background:' + color(i) +
+        '"></div></div>' +
+        '<span class="viz-valor">' + porcentaje(valores[i]) + '</span>';
+      contenedor.appendChild(fila);
+    });
+  }
+
+  function pintarDocente(ultima) {
+    pintarBarras(
+      $('grafico-docente-nivel'),
+      NIVELES.map(function (n) { return n.nombre; }),
+      estado.global,
+      function (i) { return COLOR_NIVEL[i]; },
+      nivelMap(estado.global)
+    );
+    pintarBarras(
+      $('grafico-docente-factores'),
+      FACTORES.map(function (f) { return f.nombre; }),
+      estado.factores,
+      function () { return COLOR_FACTOR; },
+      -1
+    );
+    const parada = estadoParada(estado, historial.length, restantes.length, contadores);
+    $('dato-entropia').textContent =
+      'Entropía del nivel: ' + parada.h.toFixed(3) + ' bits (umbral de ' +
+      'cierre firme: ' + H_STOP.toFixed(3) + ' bits con p_min = ' +
+      PARAMETROS.pMin + '). Incertidumbre total (nivel + errores): ' +
+      entropiaTotal(estado).toFixed(3) + ' bits. Preguntas respondidas: ' +
+      historial.length + '.';
+
+    const zona = $('dato-actualizacion');
+    if (!ultima) { zona.innerHTML = ''; return; }
+    const item = ultima.item;
+    const j = indiceFactor(item.factor);
+    let filas = '';
+    NIVELES.forEach(function (n, i) {
+      filas += '<tr><td>' + n.nombre + '</td><td>' +
+        ultima.vero.porNivel[i].toFixed(2) + '</td></tr>';
+    });
+    let filasFactor = '';
+    ['con el error', 'sin el error'].forEach(function (texto, k) {
+      filasFactor += '<tr><td>' + texto + '</td><td>' +
+        ultima.vero.porError[k].toFixed(2) + '</td></tr>';
+    });
+    zona.innerHTML =
+      '<p class="dato">Verosimilitud de la última respuesta por nivel, ' +
+      'marginada sobre el error atacado (' + FACTORES[j].nombre + '):</p>' +
+      '<table><tbody>' + filas + '</tbody></table>' +
+      '<p class="dato">Y por estado del error, marginada sobre el nivel:</p>' +
+      '<table><tbody>' + filasFactor + '</tbody></table>';
+  }
+
+  function pintarFactoresInicio() {
+    const lista = $('lista-factores');
+    FACTORES.forEach(function (f) {
+      const li = document.createElement('li');
+      li.innerHTML =
+        '<span class="punto" style="background:var(--mal)"></span>' +
+        '<strong>' + f.nombre + '</strong>: ' + f.resumen + '.';
+      lista.appendChild(li);
+    });
+  }
+
+  pintarFactoresInicio();
+  $('btn-empezar').addEventListener('click', empezar);
+  $('btn-repetir').addEventListener('click', empezar);
+})();
+</script>
+</body>
+</html>
