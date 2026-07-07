@@ -37,7 +37,8 @@ Acceso: **https://jjdeharo.github.io/bayes-acentuacion/**
   las marginales: P(nivel) y P(presente) por error.
 - La verosimilitud de cada respuesta depende del nivel y del error que la
   pregunta ataca: **sin el error**, la probabilidad de acierto la da la
-  **IRT 3PL** (`a = 1.5`, `c = 1/3`, `b` ∈ {−1, 0, +1}) y el resto se
+  **IRT 3PL** (`a ≈ 1,875`, derivado de una discriminación efectiva objetivo
+  `a_ef = 1,25` y `c = 1/3` mediante `a = a_ef / (1 − c)`; `b` ∈ {−1, 0, +1}) y el resto se
   reparte entre las opciones erróneas; **con el error**, el **distractor
   característico** atrae al alumno (≈ 0,70) y el acierto cae por debajo del
   suelo de azar (≈ 0,15), sea cual sea el nivel. Se usa la opción elegida,

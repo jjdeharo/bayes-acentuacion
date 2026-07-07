@@ -375,15 +375,18 @@ const BANCO = [
 ];
 
 const PARAMETROS = {
-  a: 1.5,             // discriminación IRT
   numOpciones: 3,
   c: 1 / 3,           // pseudoazar: tres opciones
+  aEf: 1.25,          // discriminación efectiva objetivo (ver documentación del método, §4.4)
   pMin: 0.80,
   priorError: 0.25,   // prior P(presente) de cada error
   minPreguntas: 6,
   maxPreguntas: 14,
   minPorCategoria: 2  // cobertura mínima antes de selección libre
 };
+// a nominal derivado de aEf y c: a = aEf / (1 - c), para que la discriminación
+// efectiva real (a·(1-c)) sea la misma con independencia del número de opciones.
+PARAMETROS.a = PARAMETROS.aEf / (1 - PARAMETROS.c);
 
 /*
  * Umbral de entropía asociado a pMin con n hipótesis:
