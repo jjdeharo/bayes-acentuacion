@@ -151,7 +151,7 @@
     let factoresBien = 0;
     FACTORES.forEach(function (_, j) {
       const esperado = escenario.errores.indexOf(j) !== -1 ? 'presente' : 'ausente';
-      if (clasificarFactor(estado.factores[j]) === esperado) factoresBien++;
+      if (clasificarFactor(estado.factores[j], contadores[j]) === esperado) factoresBien++;
     });
     return {
       nivelBien: nivelMap(estado.global) === escenario.nivel,

@@ -60,8 +60,11 @@ Acceso: **https://jjdeharo.github.io/bayes-acentuacion/**
   Cierre **firme** solo si el nivel alcanza `max p ≥ 0,80` con entropía
   `≤ H_stop` **y** cada error queda clasificado como presente (`p ≥ 0,80`)
   o ausente (`p ≤ 0,20`) con la cobertura mínima cumplida; en caso
-  contrario el resultado se presenta como **provisional**. Los errores sin
-  decidir se reportan como **indeterminados**, no se fuerzan. Sesión
+  contrario el resultado se presenta como **provisional**. Un error no se
+  clasifica sin al menos `2` ítems suyos respondidos: con el prior del
+  25 % la ausencia arranca en 0,75 y un solo acierto bastaría para
+  «descartarlo». Los errores sin decidir se reportan como
+  **indeterminados**, no se fuerzan. Sesión
   diagnóstica corta: sin olvido exponencial (`lambda = 1`).
 - **Resultado**: nivel MAP con su confianza y distribución completa, perfil
   de errores (presente / ausente / indeterminado con su probabilidad),

@@ -561,7 +561,7 @@
     const presentes = [];
     FACTORES.forEach(function (fac, j) {
       const p = estado.factores[j];
-      const clase = clasificarFactor(p);
+      const clase = clasificarFactor(p, contadores[j]);
       if (clase === 'presente') presentes.push(fac);
       const li = document.createElement('li');
       let html = '<span class="chip ' + clase + '">' +

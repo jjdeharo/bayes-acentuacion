@@ -625,7 +625,19 @@ function seleccionar(estado, restantes, contadores, esPrimera, rng) {
 }
 
 /* presente / ausente / indeterminado según la confianza exigida. */
-function clasificarFactor(p) {
+/*
+ * Clasificación de un factor de error. `n` (opcional) es el número de ítems de ese
+ * factor ya respondidos.
+ *
+ * Con el prior informativo P(error) = 0,25, la "ausencia" arranca ya en 0,75 y un solo
+ * acierto en un ítem del factor hunde la marginal a ~0,06: sin exigir muestra, el
+ * factor quedaría "descartado" con una sola pregunta (hallazgo N6). La selección ya
+ * garantiza `minPorCategoria` ítems por factor antes de la selección libre, así que
+ * esta puerta no cambia el comportamiento actual; la hace explícita para que la
+ * garantía no dependa de que nadie toque el banco ni el criterio de selección.
+ */
+function clasificarFactor(p, n) {
+  if (n !== undefined && n < PARAMETROS.minPorCategoria) return 'indeterminado';
   if (p >= PARAMETROS.pMin) return 'presente';
   if (p <= 1 - PARAMETROS.pMin) return 'ausente';
   return 'indeterminado';
@@ -642,8 +654,8 @@ function estadoParada(estado, nRespondidas, nRestantes, contadores) {
   const h = entropia(estado.global);
   const maxP = Math.max.apply(null, estado.global);
   const globalFirme = maxP >= PARAMETROS.pMin && h <= H_STOP;
-  const factoresFirmes = estado.factores.every(function (p) {
-    return clasificarFactor(p) !== 'indeterminado';
+  const factoresFirmes = estado.factores.every(function (p, j) {
+    return clasificarFactor(p, contadores[j]) !== 'indeterminado';
   });
   const cobertura = contadores.every(function (n) {
     return n >= PARAMETROS.minPorCategoria;
