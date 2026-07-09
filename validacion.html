@@ -8,13 +8,13 @@
   :root {
     --plano: #f9f9f7; --superficie: #fcfcfb; --tinta: #0b0b0b;
     --tinta-2: #52514e; --silenciado: #898781; --linea: #e1e0d9;
-    --borde: rgba(11,11,11,0.10); --acento: #2a78d6;
+    --borde: rgba(11,11,11,0.10); --acento: #2a78d6; --mal: #b3261e;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --plano: #0d0d0d; --superficie: #1a1a19; --tinta: #ffffff;
       --tinta-2: #c3c2b7; --silenciado: #898781; --linea: #2c2c2a;
-      --borde: rgba(255,255,255,0.10); --acento: #3987e5;
+      --borde: rgba(255,255,255,0.10); --acento: #3987e5; --mal: #f2b8b5;
     }
   }
   body {
@@ -70,14 +70,17 @@
   modelo, no validez empírica.</p>
 
   <div class="tarjeta">
-    <button id="btn-ejecutar">Ejecutar 300 simulaciones por escenario</button>
+    <button id="btn-ejecutar">Ejecutar 500 simulaciones por escenario</button>
     <div id="resultados"></div>
   </div>
 
   <p class="nota">El recurso del alumno es <code>index.html</code>; el modelo
   compartido está en <code>motor.js</code>. «Perfil exacto» exige que los
   tres errores queden clasificados correctamente (un «indeterminado» cuenta
-  como fallo de clasificación).</p>
+  como fallo de clasificación); al ser la conjunción de los tres, cae por
+  construcción y no dispara el aviso, que mira las hipótesis por separado
+  (nivel y factores). La simulación usa una semilla fija, así que dos
+  ejecuciones dan el mismo resultado.</p>
 
   <footer class="site-footer">
     © <a href="https://bilateria.org" target="_blank" rel="noopener">Juan José de Haro</a>
@@ -93,7 +96,23 @@
 (function () {
   'use strict';
 
-  const N_SIM = 300;
+  // Valor por defecto de la metodología: al menos 500 simulaciones por hipótesis o perfil.
+  const N_SIM = 500;
+  // Umbral orientativo de alerta: por debajo, el banco no separa bien ese escenario.
+  const UMBRAL_ALERTA = 0.70;
+
+  /* Generador sembrado (mulberry32). Sin él, dos ejecuciones de la misma herramienta
+     daban cifras distintas y los escenarios que rondan el umbral entraban y salían del
+     aviso: una validación del diseño debe ser reproducible. */
+  const SEMILLA = 20260709;
+  let semillaEstado = SEMILLA;
+  function rng() {
+    semillaEstado |= 0;
+    semillaEstado = (semillaEstado + 0x6D2B79F5) | 0;
+    let t = Math.imul(semillaEstado ^ (semillaEstado >>> 15), 1 | semillaEstado);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
 
   /* Escenarios: cada nivel sin errores y con cada error por separado,
      más un caso con dos errores simultáneos. */
@@ -107,7 +126,7 @@
   ESCENARIOS.push({ nivel: 1, errores: [1, 2] });
 
   function muestrear(dist) {
-    const u = Math.random();
+    const u = rng();
     let acumulado = 0;
     for (let r = 0; r < dist.length; r++) {
       acumulado += dist[r];
@@ -137,7 +156,7 @@
     let n = 0;
     let parada;
     for (;;) {
-      const eleccion = seleccionar(estado, restantes, contadores, n === 0);
+      const eleccion = seleccionar(estado, restantes, contadores, n === 0, rng);
       const item = BANCO[eleccion.idx];
       restantes = restantes.filter(function (i) { return i !== eleccion.idx; });
       contadores[indiceFactor(item.factor)]++;
@@ -148,14 +167,17 @@
       parada = estadoParada(estado, n, restantes.length, contadores);
       if (parada.parar) break;
     }
-    let factoresBien = 0;
+    let factoresBien = 0, indeterminados = 0;
     FACTORES.forEach(function (_, j) {
       const esperado = escenario.errores.indexOf(j) !== -1 ? 'presente' : 'ausente';
-      if (clasificarFactor(estado.factores[j], contadores[j]) === esperado) factoresBien++;
+      const clase = clasificarFactor(estado.factores[j], contadores[j]);
+      if (clase === esperado) factoresBien++;
+      if (clase === 'indeterminado') indeterminados++;
     });
     return {
       nivelBien: nivelMap(estado.global) === escenario.nivel,
       factoresBien: factoresBien,
+      indeterminados: indeterminados,
       perfilExacto: factoresBien === FACTORES.length,
       firme: parada.firme,
       avisoLz: !personFit(estado, historial).fiable,
@@ -172,36 +194,90 @@
   }
 
   function ejecutar() {
+    semillaEstado = SEMILLA;   // misma semilla en cada pulsación: resultados reproducibles
     let filas = '';
+    const tasasNivel = [], tasasPerfil = [], flojos = [];
+    let largoTotal = 0, indetTotal = 0;
+
     ESCENARIOS.forEach(function (e) {
       let nivelBien = 0, perfilExacto = 0, factoresBien = 0, firmes = 0,
-        avisos = 0, largo = 0;
+        avisos = 0, largo = 0, indeterminados = 0;
       for (let s = 0; s < N_SIM; s++) {
         const res = simularSesion(e);
         if (res.nivelBien) nivelBien++;
         if (res.perfilExacto) perfilExacto++;
         factoresBien += res.factoresBien;
+        indeterminados += res.indeterminados;
         if (res.firme) firmes++;
         if (res.avisoLz) avisos++;
         largo += res.n;
       }
+      const tasaNivel = nivelBien / N_SIM;
+      const tasaPerfil = perfilExacto / N_SIM;
+      const tasaFactores = factoresBien / (N_SIM * FACTORES.length);
+      tasasNivel.push(tasaNivel);
+      tasasPerfil.push(tasaPerfil);
+      largoTotal += largo / N_SIM;
+      indetTotal += indeterminados / (N_SIM * FACTORES.length);
+      // La alerta mira las hipótesis (nivel y factores), no «perfil exacto»: este último es
+      // la conjunción de los tres factores, así que cae por construcción (0,9³ ≈ 0,73) sin
+      // que ninguna hipótesis esté mal separada.
+      if (tasaNivel < UMBRAL_ALERTA || tasaFactores < UMBRAL_ALERTA) {
+        flojos.push(nombreEscenario(e));
+      }
+
+      const marca = function (t) {
+        return t < UMBRAL_ALERTA ? ' style="color:var(--mal)"' : '';
+      };
       filas += '<tr><td>' + nombreEscenario(e) + '</td>' +
-        '<td class="destacado">' + (100 * nivelBien / N_SIM).toFixed(1) + ' %</td>' +
-        '<td class="destacado">' + (100 * perfilExacto / N_SIM).toFixed(1) + ' %</td>' +
-        '<td>' + (100 * factoresBien / (N_SIM * FACTORES.length)).toFixed(1) + ' %</td>' +
+        '<td class="destacado"' + marca(tasaNivel) + '>' + (100 * tasaNivel).toFixed(1) + ' %</td>' +
+        '<td class="destacado">' + (100 * tasaPerfil).toFixed(1) + ' %</td>' +
+        '<td' + marca(tasaFactores) + '>' + (100 * factoresBien / (N_SIM * FACTORES.length)).toFixed(1) + ' %</td>' +
+        '<td>' + (100 * indeterminados / (N_SIM * FACTORES.length)).toFixed(1) + ' %</td>' +
         '<td>' + (largo / N_SIM).toFixed(1) + '</td>' +
         '<td>' + (100 * firmes / N_SIM).toFixed(0) + ' %</td>' +
         '<td>' + (100 * avisos / N_SIM).toFixed(1) + ' %</td></tr>';
     });
 
+    // Exactitud equilibrada: media de las tasas por escenario, no del total de sesiones.
+    // No coincide con la exactitud global si los escenarios no están igual de poblados,
+    // y no premia acertar solo los escenarios fáciles.
+    const media = function (v) {
+      return v.reduce(function (a, b) { return a + b; }, 0) / v.length;
+    };
+    const eqNivel = media(tasasNivel);
+    const eqPerfil = media(tasasPerfil);
+    const nEsc = ESCENARIOS.length;
+
+    const alerta = flojos.length
+      ? '<p class="nota" style="color:var(--mal)"><strong>Aviso:</strong> ' +
+        flojos.length + ' escenario' + (flojos.length === 1 ? '' : 's') +
+        ' por debajo del ' + (100 * UMBRAL_ALERTA).toFixed(0) + ' % de clasificación ' +
+        'correcta bajo el propio modelo (' + flojos.join('; ') + '). No presentes el banco ' +
+        'como bien separado en esa zona: añade ítems, revisa dificultades o verosimilitudes, ' +
+        'o declara la limitación.</p>'
+      : '<p class="nota"><strong>Sin avisos:</strong> ningún escenario baja del ' +
+        (100 * UMBRAL_ALERTA).toFixed(0) + ' % de clasificación correcta bajo el modelo.</p>';
+
     document.getElementById('resultados').innerHTML =
       '<div style="overflow-x:auto"><table><thead>' +
       '<tr><th>Escenario (nivel · errores reales)</th><th>nivel acertado</th>' +
       '<th>perfil exacto</th><th>errores bien clasificados</th>' +
+      '<th>indeterminados</th>' +
       '<th>media preguntas</th><th>cierres firmes</th><th>avisos l_z</th></tr>' +
       '</thead><tbody>' + filas + '</tbody></table></div>' +
+      '<p class="nota"><strong>Resumen</strong> (' + N_SIM + ' simulaciones × ' + nEsc +
+      ' escenarios): exactitud equilibrada de nivel ' + (100 * eqNivel).toFixed(1) +
+      ' % · de perfil ' + (100 * eqPerfil).toFixed(1) +
+      ' % · indeterminados ' + (100 * indetTotal / nEsc).toFixed(1) +
+      ' % · longitud media ' + (largoTotal / nEsc).toFixed(1) + ' preguntas.</p>' +
+      alerta +
       '<p class="nota">«Nivel acertado»: el nivel MAP coincide con el real. ' +
       '«Errores bien clasificados»: media de los tres factores. ' +
+      '«Indeterminados»: factores que el test deja sin decidir (por confianza ' +
+      'insuficiente o por muestra insuficiente de ese error). ' +
+      '«Exactitud equilibrada»: media de las tasas por escenario, para que los ' +
+      'escenarios raros pesen igual que los frecuentes. ' +
       '«Avisos l_z»: porcentaje de sesiones con aviso de person-fit ' +
       '(l_z &lt; −2); con respondentes coherentes con el modelo debe ser ' +
       'bajo (son falsas alarmas). Es fiabilidad bajo el modelo: los ' +

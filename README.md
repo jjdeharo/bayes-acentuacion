@@ -101,7 +101,14 @@ cuarto caso de «Elección del modelo» de la especificación operativa.
 - `validacion.html` — **herramienta del autor** (no del alumnado):
   validación Monte Carlo con respondentes sintéticos de nivel y perfil de
   errores conocidos; comprueba si el diseño recupera ambos y la tasa de
-  falsas alarmas del aviso de person-fit.
+  falsas alarmas del aviso de person-fit. `500` simulaciones por escenario
+  con semilla fija (reproducible); reporta exactitud equilibrada, tasa de
+  indeterminados y longitud media, y avisa de los escenarios que bajan del
+  `70 %` de clasificación correcta bajo el propio modelo. Con el banco
+  actual avisa de cuatro: el nivel «Iniciando» con cada error por separado
+  (los factores se clasifican bien solo en un `67 %` de los casos) y
+  «Avanzando · HIATO + DIACRITICA» (el nivel se recupera en un `51 %`).
+  Es fiabilidad bajo el modelo, no validez empírica.
 
 El recurso funciona sin servidor: basta abrir `index.html` en un navegador
 (con `motor.js` en la misma carpeta).
