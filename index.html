@@ -338,6 +338,7 @@
     <div class="feedback oculto" id="zona-feedback">
       <p class="veredicto" id="veredicto"></p>
       <p class="explica" id="explicacion"></p>
+      <div id="zona-calma" style="display:none;margin:12px 0;padding:12px 14px;border-radius:12px;background:#eef6ff;border:1px solid #bcd8f5;color:#1e40af;font-size:.92rem;line-height:1.5"></div>
       <button class="btn-principal" id="btn-siguiente">Siguiente</button>
     </div>
   </section>
@@ -428,13 +429,14 @@
 
   const $ = function (id) { return document.getElementById(id); };
 
-  let estado, restantes, contadores, itemActual, historial;
+  let estado, restantes, contadores, itemActual, historial, lastPauseN;
 
   function empezar() {
     estado = estadoInicial();
     restantes = BANCO.map(function (_, i) { return i; });
     contadores = FACTORES.map(function () { return 0; });
     historial = [];
+    lastPauseN = -99;
     $('pantalla-inicio').classList.add('oculto');
     $('pantalla-final').classList.add('oculto');
     $('pantalla-pregunta').classList.remove('oculto');
@@ -490,6 +492,17 @@
     const parada = estadoParada(estado, historial.length, restantes.length, contadores);
     $('btn-siguiente').textContent = parada.parar ? 'Ver resultado' : 'Siguiente';
     $('btn-siguiente').onclick = parada.parar ? terminar : siguientePregunta;
+
+    /* Coherencia EN VIVO (no solo al cierre, hallazgo 3.2): si el patrón ya es
+       inverosímil, pausa con tacto en lugar de seguir gastando banco. */
+    const calma = $('zona-calma'); calma.style.display = 'none';
+    if (!parada.parar && historial.length >= 6 && (historial.length - lastPauseN) >= 4
+        && !personFit(estado, historial).fiable) {
+      lastPauseN = historial.length;
+      calma.innerHTML = '🌿 <strong>Hagamos una pausa.</strong> Algunas respuestas no encajan del todo con lo que el sistema venía estimando —quizá por un despiste o por ir con prisa—. Respira, lee con calma la siguiente y tómate tu tiempo.';
+      calma.style.display = 'block';
+      $('btn-siguiente').textContent = 'Continuar con calma';
+    }
   }
 
   function terminar() {
