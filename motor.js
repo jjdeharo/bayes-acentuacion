@@ -378,6 +378,7 @@ const PARAMETROS = {
   numOpciones: 3,
   c: 1 / 3,           // pseudoazar: tres opciones
   aEf: 1.25,          // discriminación efectiva objetivo (ver documentación del método, §4.4)
+  pMax: 0.95,         // techo de dominio: P(acierto) <= 0.95 modela el descuido (slip), §"Verosimilitudes"
   pMin: 0.80,
   priorError: 0.25,   // prior P(presente) de cada error
   minPreguntas: 6,
@@ -407,8 +408,11 @@ function indiceFactor(idFactor) {
 }
 
 function pIrt(theta, b) {
-  return PARAMETROS.c +
-    (1 - PARAMETROS.c) / (1 + Math.exp(-PARAMETROS.a * (theta - b)));
+  // Techo de dominio (slip): ni el nivel máximo acierta con probabilidad 1 en
+  // los ítems fáciles; sin él, un fallo produciría una actualización casi
+  // determinista (ver documentación del método, §"Verosimilitudes", hallazgo 1.3).
+  return Math.min(PARAMETROS.pMax, PARAMETROS.c +
+    (1 - PARAMETROS.c) / (1 + Math.exp(-PARAMETROS.a * (theta - b))));
 }
 
 /*
